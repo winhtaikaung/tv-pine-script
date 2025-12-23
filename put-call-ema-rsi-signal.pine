@@ -1,0 +1,144 @@
+//@version=5
+indicator("PUT/CALL Labels Indicator with RSI & EMA Signals", overlay=true, max_labels_count=500)
+
+// ========== INPUT PARAMETERS ==========
+// Signal Strength Settings
+rsiLength = input.int(14, "RSI Length", minval=1)
+rsiOverbought = input.int(70, "RSI Overbought Level", minval=50, maxval=100)
+rsiOversold = input.int(30, "RSI Oversold Level", minval=0, maxval=50)
+
+// Moving Average Settings
+maLength = input.int(20, "MA Length", minval=1)
+maType = input.string("EMA", "MA Type", options=["SMA", "EMA"])
+
+// EMA Trend Sensitivity
+emaTrendThreshold = input.float(0.15, "EMA Trend Threshold %", minval=0.01, maxval=1.0, step=0.01, tooltip="Percentage change threshold for Strong Bullish/Bearish")
+
+// Signal Sensitivity
+signalStrength = input.string("Medium", "Signal Strength", options=["Low", "Medium", "High"])
+
+// Label Settings
+showCallLabels = input.bool(true, "Show CALL Labels")
+showPutLabels = input.bool(true, "Show PUT Labels")
+labelSize = input.string("small", "Label Size", options=["tiny", "small", "normal", "large"])
+
+// ========== CALCULATIONS ==========
+// RSI Calculation
+rsi = ta.rsi(close, rsiLength)
+
+// Moving Average Calculation
+ma = maType == "EMA" ? ta.ema(close, maLength) : ta.sma(close, maLength)
+
+// Price Action Signals
+bullishCandle = close > open
+bearishCandle = close < open
+strongBullish = close > open and (close - open) > (high - low) * 0.6
+strongBearish = close < open and (open - close) > (high - low) * 0.6
+
+// Volume Analysis
+volumeIncrease = volume > ta.sma(volume, 20) * 1.2
+
+// Trend Detection
+uptrend = close > ma
+downtrend = close < ma
+trendStrength = math.abs(close - ma) / ma * 100
+
+// EMA Trend Detection (Enhanced with strength classification)
+maChange = ma - ma[1]
+maChangePercent = (maChange / ma[1]) * 100
+
+// Classify EMA Trend based on percentage change
+emaTrend = if maChangePercent > emaTrendThreshold
+    "Strong Bullish"
+else if maChangePercent > 0
+    "Bullish"
+else if maChangePercent < -emaTrendThreshold
+    "Strong Bearish"
+else if maChangePercent < 0
+    "Bearish"
+else
+    "Flat"
+
+// Color coding for EMA Trend
+emaTrendColor = if maChangePercent > emaTrendThreshold
+    color.new(color.green, 0)  // Strong Bullish - Solid Green
+else if maChangePercent > 0
+    color.new(color.green, 50)  // Bullish - Light Green
+else if maChangePercent < -emaTrendThreshold
+    color.new(color.red, 0)  // Strong Bearish - Solid Red
+else if maChangePercent < 0
+    color.new(color.red, 50)  // Bearish - Light Red
+else
+    color.orange  // Flat - Orange
+
+// Momentum Detection
+momentum = ta.change(close, 3)
+strongMomentumUp = momentum > 0 and momentum > ta.stdev(momentum, 20)
+strongMomentumDown = momentum < 0 and math.abs(momentum) > ta.stdev(momentum, 20)
+
+// ========== SIGNAL LOGIC ==========
+// Signal strength multipliers
+strengthMultiplier = signalStrength == "High" ? 1.5 : signalStrength == "Medium" ? 1.0 : 0.5
+
+// CALL Signal Conditions (Bullish)
+callCondition = false
+callCondition := if signalStrength == "High"
+    rsi < rsiOversold and bullishCandle and close > ma and volumeIncrease
+else if signalStrength == "Medium"
+    (rsi < rsiOversold + 5 and bullishCandle and close > ma) or (strongBullish and uptrend and strongMomentumUp)
+else
+    (rsi < rsiOversold + 10 and bullishCandle) or (strongBullish and uptrend) or (ta.crossover(close, ma) and bullishCandle)
+
+// PUT Signal Conditions (Bearish)
+putCondition = false
+putCondition := if signalStrength == "High"
+    rsi > rsiOverbought and bearishCandle and close < ma and volumeIncrease
+else if signalStrength == "Medium"
+    (rsi > rsiOverbought - 5 and bearishCandle and close < ma) or (strongBearish and downtrend and strongMomentumDown)
+else
+    (rsi > rsiOverbought - 10 and bearishCandle) or (strongBearish and downtrend) or (ta.crossunder(close, ma) and bearishCandle)
+
+// ========== LABEL CREATION ==========
+// Create CALL Label
+if callCondition and showCallLabels
+    label.new(bar_index, low, text="ဝယ်/CALL", style=label.style_label_up, color=color.new(color.green, 0), textcolor=color.white, size=labelSize == "tiny" ? size.tiny : labelSize == "small" ? size.small : labelSize == "normal" ? size.normal : size.large)
+
+// Create PUT Label
+if putCondition and showPutLabels
+    label.new(bar_index, high, text="ရောင်း/PUT", style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white, size=labelSize == "tiny" ? size.tiny : labelSize == "small" ? size.small : labelSize == "normal" ? size.normal : size.large)
+
+// ========== VISUAL ELEMENTS ==========
+// Plot Moving Average for reference
+plot(ma, "Moving Average", color=color.new(color.blue, 0), linewidth=2)
+
+// Background color for trend
+bgcolor(uptrend ? color.new(color.green, 95) : color.new(color.red, 95))
+
+// ========== ALERTS ==========
+// Alert Conditions
+alertcondition(callCondition, title="CALL Signal", message="CALL Signal Detected!")
+alertcondition(putCondition, title="PUT Signal", message="PUT Signal Detected!")
+
+// ========== DISPLAY INFO ==========
+// Create info table with 5 rows now
+var infoTable = table.new(position.top_right, 2, 7, border_width=1)
+if barstate.islast
+    // RSI Row
+    table.cell(infoTable, 0, 0, "RSI", text_color=color.white, bgcolor=color.gray)
+    table.cell(infoTable, 1, 0, str.tostring(rsi, "#.##"), text_color=color.white, bgcolor=color.gray)
+    
+    // Price Trend Row
+    table.cell(infoTable, 0, 1, "Price Trend", text_color=color.white, bgcolor=color.gray)
+    table.cell(infoTable, 1, 1, uptrend ? "UP" : "DOWN", text_color=color.white, bgcolor=uptrend ? color.green : color.red)
+    
+    // EMA Trend Row (ENHANCED)
+    table.cell(infoTable, 0, 2, "EMA Trend", text_color=color.white, bgcolor=color.gray)
+    table.cell(infoTable, 1, 2, emaTrend, text_color=color.white, bgcolor=emaTrendColor)
+    
+    // EMA Change Percent Row (NEW - shows exact percentage)
+    table.cell(infoTable, 0, 3, "EMA Change", text_color=color.white, bgcolor=color.gray)
+    table.cell(infoTable, 1, 3, str.tostring(maChangePercent, "#.###") + "%", text_color=color.white, bgcolor=color.gray)
+    
+    // Signal Strength Row
+    table.cell(infoTable, 0, 4, "Signal", text_color=color.white, bgcolor=color.gray)
+    table.cell(infoTable, 1, 4, signalStrength, text_color=color.white, bgcolor=color.gray)
