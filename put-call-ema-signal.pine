@@ -1,5 +1,5 @@
 //@version=6
-indicator("Zay Gwet Alert Enhanced EMA & Overal Market Signal", overlay=true, max_lines_count=500, max_labels_count=500)
+indicator("Zay Gwet Alert Enhanced", overlay=true, max_lines_count=500, max_labels_count=500)
 
 // ================= INPUTS =================
 openHour    = input.int(9, "Market Open Hour", minval=0, maxval=23)
@@ -20,6 +20,18 @@ signalSizeConst = size.normal
 
 // ================= EMA TABLE SETTINGS =================
 showEMATable = input.bool(true, "Show EMA Analysis Table", group="EMA Table")
+
+// ================= MOVING AVERAGE & TREND SETTINGS =================
+showMA = input.bool(true, "Show Moving Average", group="Trend & MA")
+maType = input.string("SMA", "MA Type", options=["SMA", "EMA", "WMA", "VWMA"], group="Trend & MA")
+maLength = input.int(50, "MA Length", minval=1, group="Trend & MA")
+maColor = input.color(color.blue, "MA Line Color", group="Trend & MA")
+maWidth = input.int(2, "MA Line Width", minval=1, maxval=5, group="Trend & MA")
+
+showBgColor = input.bool(true, "Show Trend Background Color", group="Trend & MA")
+bgTransparency = input.int(95, "Background Transparency", minval=80, maxval=98, group="Trend & MA")
+bullishBgColor = input.color(color.green, "Bullish BG Color", group="Trend & MA")
+bearishBgColor = input.color(color.red, "Bearish BG Color", group="Trend & MA")
 
 // ================= TIME / ORB =================
 _y = year(time)
@@ -86,6 +98,18 @@ ema200  = ta.ema(close, 200)
 crossAboveEMA  = ta.crossover(close, ema9)
 crossBelowEMA  = ta.crossunder(close, ema9)
 
+// ================= MOVING AVERAGE CALCULATION =================
+ma = switch maType
+    "SMA"  => ta.sma(close, maLength)
+    "EMA"  => ta.ema(close, maLength)
+    "WMA"  => ta.wma(close, maLength)
+    "VWMA" => ta.vwma(close, maLength)
+    => ta.sma(close, maLength)
+
+// ================= TREND DETERMINATION =================
+uptrend = close > ma
+downtrend = close < ma
+
 // ================= EMA CHANGE PERCENTAGES =================
 ema9Change   = ((ema9 - ema9[1]) / ema9[1]) * 100
 ema20Change  = ((ema20 - ema20[1]) / ema20[1]) * 100
@@ -148,8 +172,7 @@ emaTrend = bullishCount == 5 ? "Strong Bullish" :
            bullishCount == 2 ? "Mixed" :
            bullishCount == 1 ? "Bearish" : "Strong Bearish"
 
-emaTrendColor = bullishCount >= 4 ? color.new(color.green, 0) :              bullishCount == 3 or bullishCount == 2 ? color.new(color.orange, 0) :               color.new(color.red, 0)
-
+emaTrendColor = bullishCount >= 4 ? color.new(color.green, 0) :           bullishCount == 3 or bullishCount == 2 ? color.new(color.orange, 0) :             color.new(color.red, 0)
 // ================= OVERALL EMA STRENGTH CALCULATION =================
 // Calculate average change across all EMAs
 avgEMAChange = (ema9Change + ema20Change + ema50Change + ema100Change + ema200Change) / 5
@@ -299,8 +322,14 @@ if barstate.islast and showEMATable
                bgcolor=color.new(color.gray, 70), text_size=size.small, text_halign=text.align_right)
 
 // ================= PLOTTING =================
-plotshape(crossAboveORBHigh, title="ORB High Break", style=shape.triangleup, location=location.belowbar, color=buySignalColor, size=signalSizeConst, text="ORB↑", textcolor=color.white)
-plotshape(crossBelowORBLow, title="ORB Low Break", style=shape.triangledown, location=location.abovebar, color=sellSignalColor, size=signalSizeConst, text="ORB↓", textcolor=color.white)
+// Plot Moving Average
+plot(showMA ? ma : na, "Moving Average", color=maColor, linewidth=maWidth)
+
+// Background color for trend
+bgcolor(showBgColor ? (uptrend ? color.new(bullishBgColor, bgTransparency) : color.new(bearishBgColor, bgTransparency)) : na)
+
+//plotshape(crossAboveORBHigh, title="ORB High Break", style=shape.triangleup, location=location.belowbar, color=buySignalColor, size=signalSizeConst, text="ORB↑", textcolor=color.white)
+//plotshape(crossBelowORBLow, title="ORB Low Break", style=shape.triangledown, location=location.abovebar, color=sellSignalColor, size=signalSizeConst, text="ORB↓", textcolor=color.white)
 
 plotshape(crossAboveEMA, title="EMA9 Buy (Burmese)", style=shape.labelup, location=location.belowbar, color=buySignalColor, text="ဝယ်", textcolor=color.white, size=signalSizeConst)
 plotshape(crossBelowEMA, title="EMA9 Sell (Burmese)", style=shape.labeldown, location=location.abovebar, color=sellSignalColor, text="ရောင်း", textcolor=color.white, size=signalSizeConst)
