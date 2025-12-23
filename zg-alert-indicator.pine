@@ -1,0 +1,92 @@
+//@version=6
+indicator("Zay Gwet Alert (Burmese)", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ================= INPUTS =================
+openHour    = input.int(9, "Market Open Hour", minval=0, maxval=23)
+openMin     = input.int(30, "Market Open Minute", minval=0, maxval=59)
+orbMinutes  = input.int(15, "ORB Duration (minutes)", minval=1)
+emaLen      = input.int(9, "EMA Length")
+
+showORB     = input.bool(true, "Show ORB Lines")
+
+// ================= COLOR SETTINGS =================
+orbHighColor    = input.color(color.green, "ORB High Line Color")
+orbLowColor     = input.color(color.red, "ORB Low Line Color")
+buySignalColor  = input.color(color.green, "Buy Signal Color")
+sellSignalColor = input.color(color.red, "Sell Signal Color")
+
+// ================= SIZE SETTINGS =================
+signalSizeConst = size.normal
+
+// ================= TIME / ORB =================
+_y = year(time)
+_m = month(time)
+_d = dayofmonth(time)
+start_time = timestamp(_y, _m, _d, openHour, openMin)
+end_time   = start_time + orbMinutes * 60000
+
+var float tempHigh = na
+var float tempLow  = na
+var float orbHigh  = na
+var float orbLow   = na
+
+var line orbHighLine = na
+var line orbLowLine  = na
+
+newDay = dayofmonth != dayofmonth[1]
+if newDay
+    tempHigh := na
+    tempLow  := na
+    orbHigh  := na
+    orbLow   := na
+    if not na(orbHighLine)
+        line.delete(orbHighLine)
+        orbHighLine := na
+    if not na(orbLowLine)
+        line.delete(orbLowLine)
+        orbLowLine := na
+
+sessionActive   = time >= start_time and time < end_time
+sessionStartBar = sessionActive and not sessionActive[1]
+sessionEndBar   = time >= end_time and time[1] < end_time
+
+if sessionStartBar
+    tempHigh := high
+    tempLow  := low
+else if sessionActive
+    tempHigh := math.max(nz(tempHigh, high), high)
+    tempLow  := math.min(nz(tempLow, low), low)
+
+if sessionEndBar
+    orbHigh := tempHigh
+    orbLow  := tempLow
+    if not na(orbHighLine)
+        line.delete(orbHighLine)
+    if not na(orbLowLine)
+        line.delete(orbLowLine)
+    orbHighLine := line.new(bar_index, orbHigh, bar_index + 1, orbHigh, extend=extend.right, color=orbHighColor, width=2)
+    orbLowLine  := line.new(bar_index, orbLow,  bar_index + 1, orbLow,  extend=extend.right, color=orbLowColor, width=2)
+
+// ================= SIGNAL LOGIC =================
+hasOrb = not na(orbHigh) and not na(orbLow)
+
+crossAboveORBHigh = ta.crossover(close, orbHigh) and not na(orbHigh)
+crossBelowORBLow  = ta.crossunder(close, orbLow)  and not na(orbLow)
+
+// ================= EMA9 =================
+ema9    = ta.ema(close, emaLen)
+crossAboveEMA  = ta.crossover(close, ema9)
+crossBelowEMA  = ta.crossunder(close, ema9)
+
+// ================= PLOTTING =================
+plotshape(crossAboveORBHigh, title="ORB High Break", style=shape.triangleup, location=location.belowbar, color=buySignalColor, size=signalSizeConst, text="ORB↑", textcolor=color.white)
+plotshape(crossBelowORBLow, title="ORB Low Break", style=shape.triangledown, location=location.abovebar, color=sellSignalColor, size=signalSizeConst, text="ORB↓", textcolor=color.white)
+
+plotshape(crossAboveEMA, title="EMA9 Buy (Burmese)", style=shape.labelup, location=location.belowbar, color=buySignalColor, text="ဝယ်", textcolor=color.white, size=signalSizeConst)
+plotshape(crossBelowEMA, title="EMA9 Sell (Burmese)", style=shape.labeldown, location=location.abovebar, color=sellSignalColor, text="ရောင်း", textcolor=color.white, size=signalSizeConst)
+
+// ================= ALERT CONDITIONS =================
+alertcondition(crossAboveORBHigh, "Cross Above ORB High", "Price crossed above ORB HIGH")
+alertcondition(crossBelowORBLow,  "Cross Below ORB Low",  "Price crossed below ORB LOW")
+alertcondition(crossAboveEMA, "EMA9 Cross Above", "ဝယ်")
+alertcondition(crossBelowEMA, "EMA9 Cross Below", "ရောင်း")
